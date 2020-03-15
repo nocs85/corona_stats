@@ -30,13 +30,13 @@ for i in nations:
             result = re.match(r'^<table .*>$', line)
             if result:
                 state = 1
-        elif state == 1: #search for <tr ....>date</tr>
+        elif state == 1: #search for <td ....>date</td>
             result = re.match(r'^<td .*>(\d\d\d\d-\d\d\-\d\d|⋮)<\/td>$', line)
             if result:
                 date = result.group(1)
                 i.dates.append(date)
                 state = 2
-        elif state == 2: #search for <tr ....>number</tr>
+        elif state == 2: #search for <td ....>number<...
             result = re.match(r'^<td .*>(\d+,*\d*)<.*', line)
             if result:
                 cases = result.group(1)
