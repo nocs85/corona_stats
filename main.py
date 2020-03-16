@@ -9,7 +9,7 @@ from datetime import timedelta
 # the sole ISO-8601 format we support in this script
 DATE_FORMAT = '%Y-%m-%d'
 # arbitrary minumum date (some nations have earlier data)
-MIN_DATE = '2020-01-31'
+MIN_DATE = '2020-02-21'
 
 # Plots nation data up to the provided max date
 def plotData(iMaxDate):
@@ -17,16 +17,16 @@ def plotData(iMaxDate):
 
     nations = []
 
-    Meta = collections.namedtuple('Meta', ['nation', 'url', 'dates', 'cases'])
-    nations.append(Meta('it', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Italy', [], []))
-    nations.append(Meta('de', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Germany', [], []))
-    nations.append(Meta('at', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Austria', [], []))
-    nations.append(Meta('us', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_States', [], []))
-    nations.append(Meta('fr', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_France', [], []))
-    nations.append(Meta('gb', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_Kingdom', [], []))
-    nations.append(Meta('sp', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Spain', [], []))
-    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], []))
-    nations.append(Meta('no', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Norway', [], []))
+    Meta = collections.namedtuple('Meta', ['nation', 'url', 'dates', 'cases', 'delay'])
+    nations.append(Meta('it', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Italy', [], [], -1))
+    nations.append(Meta('de', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Germany', [], [], -1))
+    nations.append(Meta('at', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Austria', [], [], -1))
+    nations.append(Meta('us', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_States', [], [], -1))
+    nations.append(Meta('fr', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_France', [], [], -1))
+    nations.append(Meta('gb', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_Kingdom', [], [], -1))
+    nations.append(Meta('sp', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Spain', [], [], -1))
+    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], [], -1))
+    nations.append(Meta('no', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Norway', [], [], -1))
 
     for aNation in nations:
         parseNation(aNation,MIN_DATE,iMaxDate)
@@ -46,15 +46,15 @@ def plotData(iMaxDate):
                 i.dates.pop(kdx)                # eliminate the date at the placeholder position
                 for days in range(diff_days-1, 0, -1):      # count backwards the number of days to add instead of the placeholder
                     extrap = start + timedelta(days=days)
-                    i.dates.insert(kdx, extrap.strftime('%Y-%m-%d'))
+                    i.dates.insert(kdx, extrap.strftime(DATE_FORMAT))
                     i.cases.insert(kdx, cases)
 
 
     # print the plots with unedited data from wiki
     plt.figure()
-    for it in nations:
-        y = list(map(int, it.cases))    # convert cases str-array to integer-array
-        plt.plot(it.dates, y, lw=0.5, marker='.', label=it.nation)
+    for aNation in nations:
+        y = list(map(int, aNation.cases))    # convert cases str-array to integer-array
+        plt.plot(aNation.dates, y, lw=0.5, marker='.', label=aNation.nation)
     plt.grid(True)
     plt.xticks(rotation=90)
     plt.legend()
@@ -74,9 +74,10 @@ def plotData(iMaxDate):
         # each 'cases' vector has to have the length of the italy-cases vector
         # fill up as needed with heading zero-cases
         for bckw in range(0, len(it.cases)-len(de.cases)):  # count backwards the number of days to add
-            extrap = datetime.strptime(de.dates[0], ('%Y-%m-%d')) + timedelta(days=-1)
-            de.dates.insert(0, extrap.strftime('%Y-%m-%d'))
+            extrap = (datetime.strptime(de.dates[0], (DATE_FORMAT)) + timedelta(days=-1)).strftime(DATE_FORMAT)
+            de.dates.insert(0, extrap)
             de.cases.insert(0, 0)
+            
 
         # cut cases-vector if longer than italy-cases
         if len(de.cases) > len(it.cases):
@@ -94,20 +95,28 @@ def plotData(iMaxDate):
             sum = sum / (jj+1)
             diff.insert(ii, sum)
 
-        delay = diff.index(min(diff))
+        aDelay = diff.index(min(diff))
 
         # remove elements from the list's head
-        for i in range(0, delay):
+        for i in range(0, aDelay):
             de.cases.pop(0)
             de.dates.pop(0)
         # subtract the delay from each datum
         for i in range(0, len(de.cases)):
-            subs = datetime.strptime(de.dates[i], (DATE_FORMAT)) + timedelta(days=-delay)
+            subs = datetime.strptime(de.dates[i], (DATE_FORMAT)) + timedelta(days=-aDelay)
             de.dates[i] = subs.strftime(DATE_FORMAT)
 
+        # save the delay (requires in place replacement of element being a namedtuple)
+        nations[n] = de._replace(delay = aDelay)
+        
+    # sort by delay
+    nations = sorted(nations, key=lambda nation: nation.delay)
+
+    for n in range(1, len(nations)):
+        de = nations[n]
         # now plot
         y = list(map(int, de.cases))
-        plt.plot(de.dates, y, lw=0.5, marker='.', label=de.nation+':'+str(delay))
+        plt.plot(de.dates, y, lw=0.5, marker='.', label=de.nation+':'+str(de.delay))
 
     plt.xticks(rotation=90)
     plt.legend()
@@ -149,7 +158,7 @@ def parseNation(ioNation,iMinDate,iMaxDate):
                     isMinDatePassed = True
                     if result.group(1) > iMaxDate:
                         break
-                # 
+                # simple ignore rule to skip ⋮ before reaching minimum date
                 elif isMinDatePassed is False:
                     continue
                 date = result.group(1)
