@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+   <body>
+
+      <h1>Country charts</h1>
+      {% if countries and deathsCountries %}
+        <div>
+          <img src="data:image/png;base64,{{ countries | safe }}" alt="Country chart alt" />
+          <img src="data:image/png;base64,{{ deathsCountries | safe }}" alt="Country chart alt" />
+        </div>
+      {% else %}
+        <p>Country chart unavailable - an error has occurred</p>
+      {% endif %}
+
+      <h1>Delay Charts</h1>
+      {% if delays and deathsDelays %}
+        <div>
+          <img src="data:image/png;base64,{{ delays | safe }}" alt="Delay chart alt" />
+          <img src="data:image/png;base64,{{ deathsDelays | safe }}" alt="Delay chart alt" />
+        </div>
+      {% else %}
+        <p>Delay chart unavailable - an error has occurred</p>
+      {% endif %}
+   </body>
+</html>
