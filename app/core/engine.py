@@ -139,16 +139,21 @@ def parseNation(ioNation, isDeaths):
         value = columns[2].text_content()
         if isDeaths == True:
             value = columns[3].text_content()
-        if len(value) > 0:
-            cases = value.split('(')[0].replace(',', '')
-            ioNation.cases.append(cases)
+
+        # extract the first number in the value string
+        # examples:
+        #  1,809(+26%)
+        #  [vi]8,215(+9.5%)     # the [vi] is a note
+        result = re.search('([0-9.,]+)', value)
+        if result:
+            cases = result.group(0).replace(',', '')
+            ioNation.cases.append(numberValidator(cases)) # validate the format
         # wikipedia might store nothing: in this case it means ZERO (unless this is the last row, in which case
         # data is late: let's just assume the same number for now)
         elif rowIndex == len(rows)-2:
             ioNation.cases.append(ioNation.cases[-1])
         else:
             ioNation.cases.append(0)
-
 
 # Expands the '⋮' placeholder with actual date-elements and then
 # eliminates all the dates prior to iMinDate
@@ -207,4 +212,11 @@ def iso8601YmdValidator(iDate):
         return datetime.strptime(iDate, DATE_FORMAT)
     except:
         msg = "Invalid date: '{0}'.".format(iDate)
+        raise argparse.ArgumentTypeError(msg)
+
+def numberValidator(iNumber):
+    try:
+        return str(int(iNumber))
+    except:
+        msg = "Invalid int: '{0}'.".format(iNumber)
         raise argparse.ArgumentTypeError(msg)
