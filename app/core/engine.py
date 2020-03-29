@@ -96,7 +96,7 @@ def processData(iMaxDate, isDeaths=False):
         title = 'DEATHS - Days to reach Italy, as of {0}'.format(iMaxDate)
     plotData(nations, title, delayChartRaw)
     delayChartRaw.seek(0)
-    outputGraphRaw['delays'] = base64.b64encode(countryChartRaw.getvalue())
+    outputGraphRaw['delays'] = base64.b64encode(delayChartRaw.getvalue())
 
     return outputGraphRaw
 
