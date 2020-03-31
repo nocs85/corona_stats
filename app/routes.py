@@ -11,8 +11,10 @@ def index():
 
     # get any query param for the number of days between [5, 60] , defaulting to 25
     days = request.args.get('days', default=25, type=int)
-    if(days < 5 ) or (days > 60):
-        days = 25
+    if(days < 10 ):
+        days = 10
+    elif (days > 50):
+        days = 50
 
     # generate graphs
     totalGraphRaw = engine.processData(datetime.now().strftime(engine.DATE_FORMAT), days = days)
