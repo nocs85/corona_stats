@@ -10,15 +10,16 @@ from lxml import html
 
 # the sole ISO-8601 format we support in this script
 DATE_FORMAT = '%Y-%m-%d'
-# arbitrary minimum date (some nations have earlier data)
-MIN_DATE = '2020-02-21'
+DAYS_WINDOW_SIZE = 25
 
 
 # Plots nation data up to the provided max date
-def processData(iMaxDate, isDeaths=False):
+def processData(iMaxDate, isDeaths=False, days = DAYS_WINDOW_SIZE):
+    # collect last days worth of data
+    MIN_DATE = (datetime.now() - timedelta(days=days)).strftime(DATE_FORMAT)
     outputGraphRaw = {}
 
-    print("Collecting data up to: '{0}'.".format(iMaxDate))
+    print("Collecting data from",MIN_DATE,"to",iMaxDate)
 
     nations = []
 
@@ -33,19 +34,19 @@ def processData(iMaxDate, isDeaths=False):
     nations.append(Meta('nl', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_Netherlands', [], [], 0))
 
 #    NO DEATHS FOR CH / NO
-#    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], [], 0))
-#    nations.append(Meta('no', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Norway', [], [], 0))
+    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], [], 0))
+    nations.append(Meta('no', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Norway', [], [], 0))
 
     for aNation in nations:
         parseNation(aNation, isDeaths)
 
-    expandDatesAndCut(nations, MIN_DATE, iMaxDate)
+    expandDatesAndCut(nations, MIN_DATE)
 
     # generate raw data as reported on wiki
     countryChartRaw = BytesIO()
-    title = "TOTAL - " + datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    title = "TOTAL (last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
     if isDeaths is True:
-        title = "DEATHS - " + datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        title = "DEATHS (last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
     plotData(nations, title, countryChartRaw)
     countryChartRaw.seek(0)
     outputGraphRaw['countries'] = base64.b64encode(countryChartRaw.getvalue())
@@ -56,6 +57,9 @@ def processData(iMaxDate, isDeaths=False):
     # calc the delay of the other countries wrt italy
     for n in range(1, len(nations)):
         cmp = nations[n]
+        # no need to process nations with no data (this is the case for some deaths)
+        if len(cmp.dates) == 0:
+            continue
 
         # calc the delay in days, use minimum square error
         diff = []
@@ -92,9 +96,9 @@ def processData(iMaxDate, isDeaths=False):
 
     # generate raw data for delays
     delayChartRaw = BytesIO()
-    title = 'TOTAL - Days to reach Italy, as of {0}'.format(iMaxDate)
+    title = "NORMALIZED TOTAL (last " + str(days) + " days) - " + iMaxDate
     if isDeaths is True:
-        title = 'DEATHS - Days to reach Italy, as of {0}'.format(iMaxDate)
+        title = "NORMALIZED DEATHS (last " + str(days) + " days) - " + iMaxDate
     plotData(nations, title, delayChartRaw)
     delayChartRaw.seek(0)
     outputGraphRaw['delays'] = base64.b64encode(delayChartRaw.getvalue())
@@ -120,17 +124,18 @@ def parseNation(ioNation, isDeaths):
         return
     # and for each row...
     # - well, not for each: wikipedia has three special rows, title, header, footers: skip them!
+    lastValue = None
     for rowIndex in range(2,len(rows)-1):
         # ... its columns
         columns = rows[rowIndex].xpath(".//td")
-        if (columns is None) or (len(columns) != 4):    # get rid of spurious data
+        if (columns is None) or (len(columns) < 3):    # get rid of spurious data
             continue
 
         # column 0: date
         date = columns[0].text_content()
         if date != '⋮':
             iso8601YmdValidator(date)  # validate the format, in case we parsed a date
-        ioNation.dates.append(date)
+        # append the date only if we have a value
 
         # column 1: chart
         # -- ignore
@@ -139,7 +144,10 @@ def parseNation(ioNation, isDeaths):
         # column 3: deaths
         value = columns[2].text_content()
         if isDeaths == True:
-            value = columns[3].text_content()
+            if len(columns) >= 4:
+                value = columns[3].text_content()
+            else:
+                continue      # no deaths for this collected dataset
 
         # extract the first number in the value string
         # examples:
@@ -148,20 +156,19 @@ def parseNation(ioNation, isDeaths):
         result = re.search('([0-9.,]+)', value)
         if result:
             cases = result.group(0).replace(',', '')
+            lastValue = cases # save the last encountered value
             ioNation.cases.append(numberValidator(cases)) # validate the format
-        # wikipedia might store nothing: in this case it means ZERO (unless this is the last row, in which case
-        # data is late: let's just assume the same number for now)
-        elif rowIndex == len(rows)-2:
-            ioNation.cases.append(ioNation.cases[-1])
-        else:
+            ioNation.dates.append(date)
+        # wikipedia might store nothing: in this case it means ZERO (if no further value was ever encountered)
+        elif lastValue is None:
             ioNation.cases.append(0)
+            ioNation.dates.append(date)
 
 # Expands the '⋮' placeholder with actual date-elements and then
 # eliminates all the dates prior to iMinDate
 #
 # - iMinDate: all dates prior to this one will be filtered out
-# - iMaxDate: all dates past this one will be filtered out
-def expandDatesAndCut(ioNation, iMinDate, iMaxDate):
+def expandDatesAndCut(ioNation, iMinDate):
     # duplicate all the '⋮' elements found in 'dates' (placeholder used in wiki-tables to compress repeated case-numbers)
     for aNation in ioNation:
         for kdx, date in enumerate(aNation.dates):
@@ -179,14 +186,14 @@ def expandDatesAndCut(ioNation, iMinDate, iMaxDate):
 
     # now filter out the dates prior to iMinDate
     for aNation in ioNation:
-        while aNation.dates[0] < iMinDate:
+        while (len(aNation.dates) > 0) and (aNation.dates[0] < iMinDate):
             aNation.cases.pop(0)
             aNation.dates.pop(0)
 
     # filter out all the dates past the newest available italian data
     for n in range(1, len(ioNation)):
         aNation = ioNation[n]
-        while aNation.dates[-1] > ioNation[0].dates[-1]:
+        while (len(aNation.dates) > 0) and (aNation.dates[-1] > ioNation[0].dates[-1]):
             aNation.cases.pop(-1)
             aNation.dates.pop(-1)
 
@@ -195,6 +202,10 @@ def plotData(ioNation, title, filename):
     # print the delayed plots, use italy as reference country
     plt.figure()
     for aNation in ioNation:
+        # skip countries with no data (might happen with deaths)
+        if len(aNation.dates) == 0:
+            continue
+
         y = list(map(int, aNation.cases))
         if aNation.delay == 0:
             plt.plot(aNation.dates, y, lw=0.5, marker='.', label=aNation.nation)

@@ -1,8 +1,10 @@
 <!doctype html>
 <html>
    <body>
+      <title>Normalized COVID-19 cases and deaths</title>
 
-      <h1>Country charts</h1>
+      <h2>Country charts</h2>
+      <a href="https://github.com/nocs85/corona_stats">nocs85/corona_stats</a>
       {% if countries and deathsCountries %}
         <div>
           <img src="data:image/png;base64,{{ countries | safe }}" alt="Country chart alt" />
@@ -12,7 +14,9 @@
         <p>Country chart unavailable - an error has occurred</p>
       {% endif %}
 
-      <h1>Delay Charts</h1>
+
+      <h2>Delay Charts</h2>
+      <a href="https://github.com/nocs85/corona_stats">nocs85/corona_stats</a>
       {% if delays and deathsDelays %}
         <div>
           <img src="data:image/png;base64,{{ delays | safe }}" alt="Delay chart alt" />
