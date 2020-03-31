@@ -135,6 +135,11 @@ def parseNation(ioNation, isDeaths):
         date = columns[0].text_content()
         if date != '⋮':
             iso8601YmdValidator(date)  # validate the format, in case we parsed a date
+
+        # when new data is getting added, edits on wikipedia might be... copy paste! Skip it for the moment
+        if date in ioNation.dates:
+            continue
+
         # append the date only if we have a value
 
         # column 1: chart
