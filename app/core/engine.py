@@ -30,6 +30,7 @@ def processData(iMaxDate, isDeaths=False):
     nations.append(Meta('fr', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_France', [], [], 0))
     nations.append(Meta('sp', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Spain', [], [], 0))
     nations.append(Meta('uk', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_Kingdom', [], [], 0))
+    nations.append(Meta('nl', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_Netherlands', [], [], 0))
 
 #    NO DEATHS FOR CH / NO
 #    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], [], 0))
