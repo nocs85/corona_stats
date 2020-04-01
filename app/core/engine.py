@@ -11,6 +11,7 @@ from lxml import html
 # the sole ISO-8601 format we support in this script
 DATE_FORMAT = '%Y-%m-%d'
 DAYS_WINDOW_SIZE = 25
+MIN_ITALY_DATE = '2020-02-21'
 
 # simple method to return the URL and print some debug info
 #
@@ -56,6 +57,12 @@ def gatherData():
 def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
     # collect last days worth of data
     minDate = (datetime.now() - timedelta(days=days)).strftime(DATE_FORMAT)
+
+    # Italy is our baseline: since there is no interesting data prior to this date, just stop
+    if minDate < MIN_ITALY_DATE:
+        minDate = MIN_ITALY_DATE
+        days = (datetime.strptime(iMaxDate, DATE_FORMAT) - datetime.strptime(minDate, DATE_FORMAT)).days
+
     outputGraphRaw = {}
 
     print("Plotting data from", minDate, "to", iMaxDate, "deaths?", isDeaths)
@@ -110,10 +117,25 @@ def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
             cmp.cases.pop(0)
             cmp.dates.pop(0)
 
-        # subtract the delay from each datum
-        for i in range(0, len(cmp.cases)):
+        # check if there are new dates that are falling before the min date (to be filtered out)
+        lastIndex = -1
+        for i in range(0, len(cmp.dates)):
             subs = datetime.strptime(cmp.dates[i], DATE_FORMAT) + timedelta(days=-aDelay - diff_days)
-            cmp.dates[i] = subs.strftime(DATE_FORMAT)
+            aNewDate = subs.strftime(DATE_FORMAT)
+            # as soon as a date is past: all good, but until them we need to filter
+            if aNewDate > minDate:
+                lastIndex = i
+                break
+        # then get rid of all of such cases
+        if lastIndex >= 1:
+            del cmp.cases[:lastIndex-1]
+            del cmp.dates[:lastIndex-1]
+
+        # subtract the delay from each datum
+        for i in range(0, len(cmp.dates)):
+            subs = datetime.strptime(cmp.dates[i], DATE_FORMAT) + timedelta(days=-aDelay - diff_days)
+            aNewDate = subs.strftime(DATE_FORMAT)
+            cmp.dates[i] = aNewDate
 
         # save the delay (requires in place replacement of element being a namedtuple)
         ioNationList[n] = cmp._replace(delay=aDelay + diff_days)
