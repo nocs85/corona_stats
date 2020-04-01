@@ -15,8 +15,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # generate graphs
-    engine.processData(args.limitDate.strftime(engine.DATE_FORMAT))
-    engine.processData(args.limitDate.strftime(engine.DATE_FORMAT),isDeaths=True)
+    nations = engine.gatherData()
+    engine.processData(nations, args.limitDate.strftime(engine.DATE_FORMAT))
+    engine.processData(nations, args.limitDate.strftime(engine.DATE_FORMAT), isDeaths=True)
     # plot them
     plt.show()
 

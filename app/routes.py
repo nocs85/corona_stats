@@ -17,8 +17,9 @@ def index():
         days = 50
 
     # generate graphs
-    totalGraphRaw = engine.processData(datetime.now().strftime(engine.DATE_FORMAT), days = days)
-    deathsGraphRaw = engine.processData(datetime.now().strftime(engine.DATE_FORMAT), isDeaths=True , days = days)
+    nations = engine.gatherData()
+    totalGraphRaw = engine.processData(nations,datetime.now().strftime(engine.DATE_FORMAT), days = days)
+    deathsGraphRaw = engine.processData(nations,datetime.now().strftime(engine.DATE_FORMAT), isDeaths=True , days = days)
 
     return render_template('index.html',
                            countries=totalGraphRaw['countries'].decode('ascii') ,

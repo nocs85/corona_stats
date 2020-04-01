@@ -1,4 +1,4 @@
-import requests
+import grequests
 import re
 import collections
 import base64
@@ -12,51 +12,78 @@ from lxml import html
 DATE_FORMAT = '%Y-%m-%d'
 DAYS_WINDOW_SIZE = 25
 
+# simple method to return the URL and print some debug info
+#
+# Returns the url
+def getUrl(aNation):
+    print('Gathering data for', aNation.nation , aNation.url)
+    return aNation.url
 
-# Plots nation data up to the provided max date
-def processData(iMaxDate, isDeaths=False, days = DAYS_WINDOW_SIZE):
-    # collect last days worth of data
-    MIN_DATE = (datetime.now() - timedelta(days=days)).strftime(DATE_FORMAT)
-    outputGraphRaw = {}
-
-    print("Collecting data from",MIN_DATE,"to",iMaxDate)
-
+# gather data at once for the configured list of nations
+#
+# Returns the namedtuple for all nations
+def gatherData():
     nations = []
 
-    Meta = collections.namedtuple('Meta', ['nation', 'url', 'dates', 'cases', 'delay'])
-    nations.append(Meta('it', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Italy', [], [], 0))
-    nations.append(Meta('de', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Germany', [], [], 0))
-    nations.append(Meta('at', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Austria', [], [], 0))
-    nations.append(Meta('us', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_States', [], [], 0))
-    nations.append(Meta('fr', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_France', [], [], 0))
-    nations.append(Meta('sp', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Spain', [], [], 0))
-    nations.append(Meta('uk', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_Kingdom', [], [], 0))
-    nations.append(Meta('nl', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_Netherlands', [], [], 0))
+    Meta = collections.namedtuple('Meta', ['nation', 'url', 'dates', 'cases', 'delay', 'content'])
+    nations.append(Meta('it', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Italy', [], [], 0, ''))
+    nations.append(Meta('de', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Germany', [], [], 0, ''))
+    nations.append(Meta('at', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Austria', [], [], 0, ''))
+    nations.append(Meta('us', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_States', [], [], 0, ''))
+    nations.append(Meta('fr', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_France', [], [], 0, ''))
+    nations.append(Meta('sp', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Spain', [], [], 0, ''))
+    nations.append(Meta('uk', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_Kingdom', [], [], 0, ''))
+    nations.append(Meta('nl', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_Netherlands', [], [], 0, ''))
+    #    NO DEATHS FOR CH / NO
+    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], [], 0, ''))
+    nations.append(Meta('no', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Norway', [], [], 0, ''))
 
-#    NO DEATHS FOR CH / NO
-    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], [], 0))
-    nations.append(Meta('no', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Norway', [], [], 0))
+    # retrieve all nations' content
+    results = grequests.map((grequests.get(getUrl(nations[n])) for n in range(0, len(nations))))
+    for n in range(0, len(nations)):
+        # insert content in tuple (darn replace)
+        nations[n] = nations[n]._replace(content=results[n].content)
 
-    for aNation in nations:
-        parseNation(aNation, isDeaths)
+    return nations
 
-    expandDatesAndCut(nations, MIN_DATE)
+
+# Plots nation data up to the provided max date
+#
+# - ioNationList list of nation named tuples, populated as output
+# - iMaxDate max date
+# - isDeaths flag to determine if deaths are to be plotted rather than cases
+# - days sliding window configuration
+def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
+    # collect last days worth of data
+    minDate = (datetime.now() - timedelta(days=days)).strftime(DATE_FORMAT)
+    outputGraphRaw = {}
+
+    print("Plotting data from", minDate, "to", iMaxDate, "deaths?", isDeaths)
+
+    # for each nation
+    for n in range(0, len(ioNationList)):
+        # clear data (darn replace)
+        ioNationList[n] = ioNationList[n]._replace(dates=[], cases=[], delay=0)
+        # parse data from content
+        parseNation(ioNationList[n], isDeaths)
+
+    expandDatesAndCut(ioNationList, minDate)
 
     # generate raw data as reported on wiki
     countryChartRaw = BytesIO()
     title = "TOTAL (last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
     if isDeaths is True:
         title = "DEATHS (last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
-    plotData(nations, title, countryChartRaw)
+    plotData(ioNationList, title, countryChartRaw)
     countryChartRaw.seek(0)
     outputGraphRaw['countries'] = base64.b64encode(countryChartRaw.getvalue())
 
     # get italy to calc the delay with the other nations
-    it = nations[0]
+    it = ioNationList[0]
 
     # calc the delay of the other countries wrt italy
-    for n in range(1, len(nations)):
-        cmp = nations[n]
+    for n in range(1, len(ioNationList)):
+        cmp = ioNationList[n]
         # no need to process nations with no data (this is the case for some deaths)
         if len(cmp.dates) == 0:
             continue
@@ -85,35 +112,29 @@ def processData(iMaxDate, isDeaths=False, days = DAYS_WINDOW_SIZE):
 
         # subtract the delay from each datum
         for i in range(0, len(cmp.cases)):
-            subs = datetime.strptime(cmp.dates[i], DATE_FORMAT) + timedelta(days=-aDelay-diff_days)
+            subs = datetime.strptime(cmp.dates[i], DATE_FORMAT) + timedelta(days=-aDelay - diff_days)
             cmp.dates[i] = subs.strftime(DATE_FORMAT)
 
         # save the delay (requires in place replacement of element being a namedtuple)
-        nations[n] = cmp._replace(delay=aDelay+diff_days)
+        ioNationList[n] = cmp._replace(delay=aDelay + diff_days)
 
     # sort by delay
-    nations = sorted(nations, key=lambda nation: nation.delay)
+    ioNationList = sorted(ioNationList, key=lambda nation: nation.delay)
 
     # generate raw data for delays
     delayChartRaw = BytesIO()
     title = "NORMALIZED TOTAL (last " + str(days) + " days) - " + iMaxDate
     if isDeaths is True:
         title = "NORMALIZED DEATHS (last " + str(days) + " days) - " + iMaxDate
-    plotData(nations, title, delayChartRaw)
+    plotData(ioNationList, title, delayChartRaw)
     delayChartRaw.seek(0)
     outputGraphRaw['delays'] = base64.b64encode(delayChartRaw.getvalue())
 
     return outputGraphRaw
 
-# Parses wikpedia table format for the provided date range
-# 
-# special '⋮' are parsed only once the iMinDate has been reached
-#
-# - ioNation: meta array which will be parsed
+
 def parseNation(ioNation, isDeaths):
-    print('getting data for:' + ioNation.nation + ' ' + ioNation.url)
-    r = requests.get(ioNation.url)
-    tree = html.fromstring(r.content)
+    tree = html.fromstring(ioNation.content)
     # get the table with data - can be spotted by the header containing a specific text
     aTable = tree.xpath("//th[contains(text(), 'COVID-19 cases')]/ancestor::table")
     if (aTable is None) or (len(aTable) != 1):
@@ -125,10 +146,10 @@ def parseNation(ioNation, isDeaths):
     # and for each row...
     # - well, not for each: wikipedia has three special rows, title, header, footers: skip them!
     lastValue = None
-    for rowIndex in range(2,len(rows)-1):
+    for rowIndex in range(2, len(rows) - 1):
         # ... its columns
         columns = rows[rowIndex].xpath(".//td")
-        if (columns is None) or (len(columns) < 3):    # get rid of spurious data
+        if (columns is None) or (len(columns) < 3):  # get rid of spurious data
             continue
 
         # column 0: date
@@ -152,7 +173,7 @@ def parseNation(ioNation, isDeaths):
             if len(columns) >= 4:
                 value = columns[3].text_content()
             else:
-                continue      # no deaths for this collected dataset
+                continue  # no deaths for this collected dataset
 
         # extract the first number in the value string
         # examples:
@@ -161,13 +182,14 @@ def parseNation(ioNation, isDeaths):
         result = re.search('([0-9.,]+)', value)
         if result:
             cases = result.group(0).replace(',', '')
-            lastValue = cases # save the last encountered value
-            ioNation.cases.append(numberValidator(cases)) # validate the format
+            lastValue = cases  # save the last encountered value
+            ioNation.cases.append(numberValidator(cases))  # validate the format
             ioNation.dates.append(date)
         # wikipedia might store nothing: in this case it means ZERO (if no further value was ever encountered)
         elif lastValue is None:
             ioNation.cases.append(0)
             ioNation.dates.append(date)
+
 
 # Expands the '⋮' placeholder with actual date-elements and then
 # eliminates all the dates prior to iMinDate
@@ -182,9 +204,11 @@ def expandDatesAndCut(ioNation, iMinDate):
                 end = datetime.strptime(aNation.dates[kdx + 1], DATE_FORMAT)
                 diff_days = (end - start).days
 
-                cases = aNation.cases.pop(kdx)  # get the number of cases at the placeholder pos and then eliminate the '⋮' element
+                cases = aNation.cases.pop(
+                    kdx)  # get the number of cases at the placeholder pos and then eliminate the '⋮' element
                 aNation.dates.pop(kdx)  # eliminate the date at the placeholder position
-                for days in range(diff_days - 1, 0, -1):  # count backwards the number of days to add instead of the placeholder
+                for days in range(diff_days - 1, 0,
+                                  -1):  # count backwards the number of days to add instead of the placeholder
                     extrap = start + timedelta(days=days)
                     aNation.dates.insert(kdx, extrap.strftime(DATE_FORMAT))
                     aNation.cases.insert(kdx, cases)
@@ -220,7 +244,7 @@ def plotData(ioNation, title, filename):
     plt.xticks(rotation=90)
     plt.legend()
     plt.title(title)
-    plt.savefig(filename , format='png')
+    plt.savefig(filename, format='png')
 
 
 # Parses %Y-%m-%d ISO-8601 dates, raising an exception if violated
@@ -230,6 +254,7 @@ def iso8601YmdValidator(iDate):
     except:
         msg = "Invalid date: '{0}'.".format(iDate)
         raise argparse.ArgumentTypeError(msg)
+
 
 def numberValidator(iNumber):
     try:
