@@ -18,6 +18,7 @@ if __name__ == "__main__":
     nations = engine.gatherData()
     engine.processData(nations, args.limitDate.strftime(engine.DATE_FORMAT))
     engine.processData(nations, args.limitDate.strftime(engine.DATE_FORMAT), isDeaths=True)
+    engine.processData(nations, args.limitDate.strftime(engine.DATE_FORMAT), isDeaths=True, isPopulation=True)
     # plot them
     plt.show()
 

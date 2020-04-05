@@ -5,10 +5,11 @@
 
       <h2>Country charts</h2>
       <a href="https://github.com/nocs85/corona_stats">nocs85/corona_stats</a>
-      {% if countries and deathsCountries %}
+      {% if countries and deathsCountries and deathsPopCountries %}
         <div>
           <img src="data:image/png;base64,{{ countries | safe }}" alt="Country chart alt" />
           <img src="data:image/png;base64,{{ deathsCountries | safe }}" alt="Country chart alt" />
+          <img src="data:image/png;base64,{{ deathsPopCountries | safe }}" alt="Country chart alt" />
         </div>
       {% else %}
         <p>Country chart unavailable - an error has occurred</p>
@@ -17,10 +18,11 @@
 
       <h2>Delay Charts</h2>
       <a href="https://github.com/nocs85/corona_stats">nocs85/corona_stats</a>
-      {% if delays and deathsDelays %}
+      {% if delays and deathsDelays and deathsPopDelays %}
         <div>
           <img src="data:image/png;base64,{{ delays | safe }}" alt="Delay chart alt" />
           <img src="data:image/png;base64,{{ deathsDelays | safe }}" alt="Delay chart alt" />
+          <img src="data:image/png;base64,{{ deathsPopDelays | safe }}" alt="Delay chart alt" />
         </div>
       {% else %}
         <p>Delay chart unavailable - an error has occurred</p>

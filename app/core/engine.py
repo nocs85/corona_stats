@@ -12,13 +12,14 @@ from lxml import html
 DATE_FORMAT = '%Y-%m-%d'
 DAYS_WINDOW_SIZE = 25
 MIN_ITALY_DATE = '2020-02-21'
+URL_TEMPLATE = 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_%s'
 
 # simple method to return the URL and print some debug info
 #
 # Returns the url
 def getUrl(aNation):
-    print('Gathering data for', aNation.nation , aNation.url)
-    return aNation.url
+    print('Gathering', aNation.nation , URL_TEMPLATE % aNation.url)
+    return URL_TEMPLATE % aNation.url
 
 # gather data at once for the configured list of nations
 #
@@ -26,18 +27,20 @@ def getUrl(aNation):
 def gatherData():
     nations = []
 
-    Meta = collections.namedtuple('Meta', ['nation', 'url', 'dates', 'cases', 'delay', 'content'])
-    nations.append(Meta('it', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Italy', [], [], 0, ''))
-    nations.append(Meta('de', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Germany', [], [], 0, ''))
-    nations.append(Meta('at', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Austria', [], [], 0, ''))
-    nations.append(Meta('us', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_States', [], [], 0, ''))
-    nations.append(Meta('fr', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_France', [], [], 0, ''))
-    nations.append(Meta('sp', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Spain', [], [], 0, ''))
-    nations.append(Meta('uk', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_United_Kingdom', [], [], 0, ''))
-    nations.append(Meta('nl', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_the_Netherlands', [], [], 0, ''))
-    #    NO DEATHS FOR CH / NO
-    nations.append(Meta('ch', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Switzerland', [], [], 0, ''))
-    nations.append(Meta('no', 'https://en.wikipedia.org/wiki/2020_coronavirus_pandemic_in_Norway', [], [], 0, ''))
+    # NOTE: why are we storing an index? because python tuple replacement messes up original indexing
+    # population is the result of a simple query in google as of 05/04
+    Meta = collections.namedtuple('Meta', ['index', 'nation', 'url', 'dates', 'cases', 'delay', 'content', 'population'])
+    nations.append(Meta(len(nations), 'it', 'Italy', [], [], 0, '', 60.48))
+    nations.append(Meta(len(nations), 'de', 'Germany', [], [], 0, '', 82.79))
+    nations.append(Meta(len(nations), 'at', 'Austria', [], [], 0, '', 8.822))
+    nations.append(Meta(len(nations), 'us', 'the_United_States', [], [], 0, '', 327.2))
+    nations.append(Meta(len(nations), 'fr', 'France', [], [], 0, '', 66.99))
+    nations.append(Meta(len(nations), 'sp', 'Spain', [], [], 0, '', 46.66))
+    nations.append(Meta(len(nations), 'uk', 'the_United_Kingdom', [], [], 0, '', 66.44))
+    nations.append(Meta(len(nations), 'nl', 'the_Netherlands', [], [], 0, '', 17.18))
+    #    NO DEATHS FOR CH / SW
+    nations.append(Meta(len(nations),'ch', 'Switzerland', [], [], 0, '', 8.57))
+    nations.append(Meta(len(nations),'sw', 'Sweden', [], [], 0, '', 10.12))
 
     # retrieve all nations' content
     results = grequests.map((grequests.get(getUrl(nations[n])) for n in range(0, len(nations))))
@@ -54,7 +57,8 @@ def gatherData():
 # - iMaxDate max date
 # - isDeaths flag to determine if deaths are to be plotted rather than cases
 # - days sliding window configuration
-def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
+# - isPopulation should we normalize data based on population?
+def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE, isPopulation=False):
     # collect last days worth of data
     minDate = (datetime.now() - timedelta(days=days)).strftime(DATE_FORMAT)
 
@@ -65,22 +69,26 @@ def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
 
     outputGraphRaw = {}
 
-    print("Plotting data from", minDate, "to", iMaxDate, "deaths?", isDeaths)
+    print("Plotting data from", minDate, "to", iMaxDate, "deaths?", isDeaths, "population?", isPopulation)
 
     # for each nation
     for n in range(0, len(ioNationList)):
         # clear data (darn replace)
         ioNationList[n] = ioNationList[n]._replace(dates=[], cases=[], delay=0)
         # parse data from content
-        parseNation(ioNationList[n], isDeaths)
+        parseNation(ioNationList[n], isDeaths, isPopulation)
 
     expandDatesAndCut(ioNationList, minDate)
 
     # generate raw data as reported on wiki
     countryChartRaw = BytesIO()
-    title = "TOTAL (last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
+    title = "TOTAL "
     if isDeaths is True:
-        title = "DEATHS (last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
+        title = "DEATHS "
+    if isPopulation is True:
+        title = title + "over 1M population "
+    title = title + "(last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
+
     plotData(ioNationList, title, countryChartRaw)
     countryChartRaw.seek(0)
     outputGraphRaw['countries'] = base64.b64encode(countryChartRaw.getvalue())
@@ -101,7 +109,7 @@ def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
             ss = 0
             for jj in range(ii, len(cmp.cases)):
                 c = jj - ii
-                ss = ss + (int(it.cases[c]) - int(cmp.cases[jj])) ** 2
+                ss = ss + (float(it.cases[c]) - float(cmp.cases[jj])) ** 2
             diff.insert(ii, ss)
 
         aDelay = diff.index(min(diff))
@@ -145,9 +153,15 @@ def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
 
     # generate raw data for delays
     delayChartRaw = BytesIO()
-    title = "NORMALIZED TOTAL (last " + str(days) + " days) - " + iMaxDate
+
+    title = "NORMALIZED TOTAL "
     if isDeaths is True:
-        title = "NORMALIZED DEATHS (last " + str(days) + " days) - " + iMaxDate
+        title = "NORMALIZED DEATHS "
+    if isPopulation is True:
+        title = title + "over 1M population "
+    title = title + "(last " + str(days) + " days) - " + datetime.now().strftime(DATE_FORMAT)
+
+
     plotData(ioNationList, title, delayChartRaw)
     delayChartRaw.seek(0)
     outputGraphRaw['delays'] = base64.b64encode(delayChartRaw.getvalue())
@@ -155,7 +169,7 @@ def processData(ioNationList, iMaxDate, isDeaths=False, days=DAYS_WINDOW_SIZE):
     return outputGraphRaw
 
 
-def parseNation(ioNation, isDeaths):
+def parseNation(ioNation, isDeaths, isPopulation):
     tree = html.fromstring(ioNation.content)
     # get the table with data - can be spotted by the header containing a specific text
     aTable = tree.xpath("//th[contains(text(), 'COVID-19 cases')]/ancestor::table")
@@ -205,7 +219,11 @@ def parseNation(ioNation, isDeaths):
         if result:
             cases = result.group(0).replace(',', '')
             lastValue = cases  # save the last encountered value
-            ioNation.cases.append(numberValidator(cases))  # validate the format
+            cases = numberValidator(cases)  # validate the format
+            # check if population normalization should occur
+            if isPopulation:
+                cases = str(float(cases) / float(ioNation.population))
+            ioNation.cases.append(cases)
             ioNation.dates.append(date)
         # wikipedia might store nothing: in this case it means ZERO (if no further value was ever encountered)
         elif lastValue is None:
@@ -257,11 +275,13 @@ def plotData(ioNation, title, filename):
         if len(aNation.dates) == 0:
             continue
 
-        y = list(map(int, aNation.cases))
+        y = list(map(float, aNation.cases))
         if aNation.delay == 0:
-            plt.plot(aNation.dates, y, lw=0.5, marker='.', label=aNation.nation)
+            lines = plt.plot(aNation.dates, y, lw=0.5, marker='.', label=aNation.nation)
         else:
-            plt.plot(aNation.dates, y, lw=0.5, marker='.', label=aNation.nation + ':' + str(-aNation.delay))
+            lines = plt.plot(aNation.dates, y, lw=0.5, marker='.', label=aNation.nation + ':' + str(-aNation.delay))
+        # be coherent across different graphs with color coding
+        lines[0].set_color('C' + str(aNation.index))
     plt.grid()
     plt.xticks(rotation=90)
     plt.legend()
